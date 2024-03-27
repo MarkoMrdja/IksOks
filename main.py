@@ -16,6 +16,8 @@ cell_height = 0
 cell_width = 0
 cell_positions = []
 
+previous_frame = None
+
 def detect_grid_lines(img):
     global horizontal_lines, vertical_lines, frame_counter
 
@@ -158,22 +160,77 @@ def draw_cells(image):
         cv2.rectangle(image, top_left, bottom_right, (255, 0, 0), 2)
 
 
+def detect_signs(frame):
+    global cell_positions, cell_height, cell_width
+    
+    for cell_center in cell_positions:
+        x = int(cell_center[0] - cell_width / 2)
+        y = int(cell_center[1] - cell_height / 2)
+        
+        # Draw rectangle around the cell in the original frame
+        #cv2.rectangle(frame, (x, y), (x + cell_width, y + cell_height), (0, 255, 0), 2)
+        
+        # Crop the cell area from the frame
+        cell_image = frame[y:y+cell_height, x:x+cell_width]
+        
+        # Convert the cell image to grayscale
+        cell_gray = cv2.cvtColor(cell_image, cv2.COLOR_BGR2GRAY)
+        
+        # Apply thresholding to isolate signs
+        _, thresh = cv2.threshold(cell_gray, 127, 255, cv2.THRESH_BINARY_INV+cv2.THRESH_OTSU)
+        
+        # Find contours in the thresholded image
+        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        # Draw contours on the cell image
+        cv2.drawContours(cell_image, contours, -1, (0, 0, 255), 2)
+
+
+def detect_hand(frame):
+    global previous_frame
+
+    # Define region of interest (ROI) in the top center part of the frame
+    height, width = frame.shape[:2]
+    roi_top = 5
+    roi_bottom = height // 5  # Adjust this value as needed
+    roi_left = width // 5
+    roi_right = width - width // 5
+    roi = frame[roi_top:roi_bottom, roi_left:roi_right]
+
+    #cv2.rectangle(frame, (roi_left, roi_top), (roi_right, roi_bottom), (0, 255, 0), 2)
+
+    gray_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+
+    if previous_frame is None:
+        previous_frame = gray_roi
+        return
+    else:
+        frame_diff = cv2.absdiff(gray_roi, previous_frame)
+        _, motion_mask = cv2.threshold(frame_diff, 30, 255, cv2.THRESH_BINARY)
+        if cv2.countNonZero(motion_mask) > 100:
+            return True
+        else:
+            return False
+
+
+
+
 cap = cv2.VideoCapture('xo2c.avi')
 
 while cap.isOpened():
     ret, frame = cap.read()
     if not ret:
         break
-
+    
     # Detect grid lines
     detect_grid_lines(frame)
 
     detected_lines_canvas = np.zeros_like(frame)
     draw_detected_lines_bottom_corner(detected_lines_canvas, horizontal_lines + vertical_lines, True)
 
-    if len(cell_positions) > 0:
-        for point in cell_positions:
-            cv2.circle(detected_lines_canvas, (int(point[0]), int(point[1])), 5, (0, 255, 0), -1)
+    if not detect_hand(frame) and len(cell_positions) > 0:
+        detect_signs(frame)
+        
 
     # Display the frame with drawn grid lines
     cv2.imshow('Original Video', frame)
