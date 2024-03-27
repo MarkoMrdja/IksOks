@@ -176,9 +176,6 @@ def detect_signs(frame):
 
         # Draw rectangle around the cell in the original frame
         #cv2.rectangle(frame, (x, y), (x + cell_width, y + cell_height), (0, 255, 0), 2)
-        
-        # Crop the cell area from the frame
-        # cell_image = frame[y:y+cell_height, x:x+cell_width]
 
         x_roi = x + 2
         y_roi = y + 2
@@ -208,21 +205,25 @@ def detect_signs(frame):
                 contour_area = cv2.contourArea(shape)
                 
                 # Determine if the contour represents X or O based on area (heuristic)
-                if contour_area > 1000:  # Adjust this threshold as needed
-                    game_state[i // 3][i % 3] = 1  # X (player 1)
-                elif contour_area > 500:  # Adjust this threshold as needed
-                    game_state[i // 3][i % 3] = 0  # O (player 2)
+                if contour_area > 100 and contour_area < 190:  # Adjust this threshold as needed
+                    if game_state[i // 3][i % 3] == -1:
+                        game_state[i // 3][i % 3] = 1  # X (player 1)
+                elif contour_area > 200 and contour_area < 400:  # Adjust this threshold as needed
+                    if game_state[i // 3][i % 3] == -1:
+                        game_state[i // 3][i % 3] = 0  # O (player 2)
                 else:
-                    game_state[i // 3][i % 3] = -1  # Empty
+                    if game_state[i // 3][i % 3] == -1:
+                        game_state[i // 3][i % 3] = -1  # Empty
                     
                 # Optionally, draw the detected contour on the original frame
-                cell_cont = cv2.drawContours(cell_image, [shape], -1, (0, 0, 255), 2)
-                cv2.imshow(f"Cell {i + 1} with contours", cell_cont)
-                cv2.waitKey(0)
-                print(contour_area)
-                cv2.destroyWindow(f"Cell {i + 1} with contours")
+                # cell_cont = cv2.drawContours(cell_image, [shape], -1, (0, 0, 255), 2)
+                # cv2.imshow(f"Cell {i + 1} with contours", cell_cont)
+                # cv2.waitKey(0)
+                # print(contour_area)
+                # cv2.destroyWindow(f"Cell {i + 1} with contours")
             else:
-                game_state[i // 3][i % 3] = -1  # Empty  
+                if game_state[i // 3][i % 3] == -1:
+                        game_state[i // 3][i % 3] = -1  # Empty
 
 
 def detect_hand(frame):
@@ -255,7 +256,7 @@ def detect_hand(frame):
 
 
 
-cap = cv2.VideoCapture('xo2c.avi')
+cap = cv2.VideoCapture('xo1c.avi')
 
 while cap.isOpened():
     ret, frame = cap.read()
