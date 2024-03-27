@@ -18,8 +18,10 @@ cell_positions = []
 
 previous_frame = None
 
+hand_in_frame = False
+
 def detect_grid_lines(img):
-    global horizontal_lines, vertical_lines, frame_counter
+    global horizontal_lines, vertical_lines, frame_counter, hand_in_frame
 
     bottom_ignore_pixels = 10
     right_ignore_pixels = 10
@@ -54,11 +56,16 @@ def detect_grid_lines(img):
     if len(horizontal_lines) >= 2 and len(vertical_lines) >= 2:
             find_cell_positions()
 
-    frame_counter += 1
-    if frame_counter >= 30:
+    if hand_in_frame:
+        hand_in_frame = False
         horizontal_lines.clear()
         vertical_lines.clear()
-        frame_counter = 0
+
+    # frame_counter += 1
+    # if frame_counter >= 30:
+    #     horizontal_lines.clear()
+    #     vertical_lines.clear()
+    #     frame_counter = 0
 
 
 def find_intersection(line1, line2):
@@ -163,31 +170,63 @@ def draw_cells(image):
 def detect_signs(frame):
     global cell_positions, cell_height, cell_width
     
-    for cell_center in cell_positions:
+    for i, cell_center in enumerate(cell_positions):
         x = int(cell_center[0] - cell_width / 2)
         y = int(cell_center[1] - cell_height / 2)
-        
+
         # Draw rectangle around the cell in the original frame
         #cv2.rectangle(frame, (x, y), (x + cell_width, y + cell_height), (0, 255, 0), 2)
         
         # Crop the cell area from the frame
-        cell_image = frame[y:y+cell_height, x:x+cell_width]
+        # cell_image = frame[y:y+cell_height, x:x+cell_width]
+
+        x_roi = x + 2
+        y_roi = y + 2
+        width_roi = cell_width - 4
+        height_roi = cell_height - 4
         
+        # Crop the cell area from the frame, excluding the border area
+        cell_image = frame[y_roi:y_roi+height_roi, x_roi:x_roi+width_roi]
+
         # Convert the cell image to grayscale
         cell_gray = cv2.cvtColor(cell_image, cv2.COLOR_BGR2GRAY)
         
         # Apply thresholding to isolate signs
-        _, thresh = cv2.threshold(cell_gray, 127, 255, cv2.THRESH_BINARY_INV+cv2.THRESH_OTSU)
+        _, thresh = cv2.threshold(cell_gray, 135, 255, cv2.THRESH_BINARY)
         
         # Find contours in the thresholded image
-        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        
-        # Draw contours on the cell image
-        cv2.drawContours(cell_image, contours, -1, (0, 0, 255), 2)
+        contours, _ = cv2.findContours(thresh, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+
+        if contours:
+            # Sort contours by area in descending order
+            contours = sorted(contours, key=cv2.contourArea, reverse=True)
+            
+            if len(contours) > 1:
+                shape = contours[1]
+                
+                # Calculate the area of the contour
+                contour_area = cv2.contourArea(shape)
+                
+                # Determine if the contour represents X or O based on area (heuristic)
+                if contour_area > 1000:  # Adjust this threshold as needed
+                    game_state[i // 3][i % 3] = 1  # X (player 1)
+                elif contour_area > 500:  # Adjust this threshold as needed
+                    game_state[i // 3][i % 3] = 0  # O (player 2)
+                else:
+                    game_state[i // 3][i % 3] = -1  # Empty
+                    
+                # Optionally, draw the detected contour on the original frame
+                cell_cont = cv2.drawContours(cell_image, [shape], -1, (0, 0, 255), 2)
+                cv2.imshow(f"Cell {i + 1} with contours", cell_cont)
+                cv2.waitKey(0)
+                print(contour_area)
+                cv2.destroyWindow(f"Cell {i + 1} with contours")
+            else:
+                game_state[i // 3][i % 3] = -1  # Empty  
 
 
 def detect_hand(frame):
-    global previous_frame
+    global previous_frame, hand_in_frame
 
     # Define region of interest (ROI) in the top center part of the frame
     height, width = frame.shape[:2]
@@ -208,6 +247,7 @@ def detect_hand(frame):
         frame_diff = cv2.absdiff(gray_roi, previous_frame)
         _, motion_mask = cv2.threshold(frame_diff, 30, 255, cv2.THRESH_BINARY)
         if cv2.countNonZero(motion_mask) > 100:
+            hand_in_frame = True
             return True
         else:
             return False
@@ -227,6 +267,8 @@ while cap.isOpened():
 
     detected_lines_canvas = np.zeros_like(frame)
     draw_detected_lines_bottom_corner(detected_lines_canvas, horizontal_lines + vertical_lines, True)
+
+    hand_in_frame = detect_hand(frame)
 
     if not detect_hand(frame) and len(cell_positions) > 0:
         detect_signs(frame)
