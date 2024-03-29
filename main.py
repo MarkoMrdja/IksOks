@@ -1,27 +1,26 @@
-import itertools
 import cv2
 import numpy as np
 
 
 horizontal_lines = []
 vertical_lines = []
-frame_counter = 0
+bu_horizontal_lines = []
+bu_vertical_lines = []
 
 game_state = [[-1, -1, -1], 
               [-1, -1, -1], 
               [-1, -1, -1]]
 
 intersection_points = []
+cell_positions = []
 cell_height = 0
 cell_width = 0
-cell_positions = []
 
 previous_frame = None
-
 hand_in_frame = False
 
 def detect_grid_lines(img):
-    global horizontal_lines, vertical_lines, frame_counter, hand_in_frame
+    global horizontal_lines, vertical_lines, bu_horizontal_lines, bu_vertical_lines, hand_in_frame
 
     bottom_ignore_pixels = 10
     right_ignore_pixels = 10
@@ -55,24 +54,18 @@ def detect_grid_lines(img):
     
     if len(horizontal_lines) >= 2 and len(vertical_lines) >= 2:
             find_cell_positions()
+            bu_horizontal_lines = horizontal_lines.copy()
+            bu_vertical_lines = vertical_lines.copy()
 
     if hand_in_frame:
         hand_in_frame = False
         horizontal_lines.clear()
         vertical_lines.clear()
 
-    # frame_counter += 1
-    # if frame_counter >= 30:
-    #     horizontal_lines.clear()
-    #     vertical_lines.clear()
-    #     frame_counter = 0
-
 
 def find_intersection(line1, line2):
-    # extract points
     x1, y1, x2, y2 = line1[0]
     x3, y3, x4, y4 = line2[0]
-    # compute determinant
     Px = ((x1*y2 - y1*x2)*(x3-x4) - (x1-x2)*(x3*y4 - y3*x4))/  \
         ((x1-x2)*(y3-y4) - (y1-y2)*(x3-x4))
     Py = ((x1*y2 - y1*x2)*(y3-y4) - (y1-y2)*(x3*y4 - y3*x4))/  \
@@ -110,14 +103,10 @@ def draw_grid_lines_on_img(img, lines):
         cv2.line(img, (x1, y1), (x2, y2), (0, 255, 0), 2)
 
 
-def draw_detected_lines_bottom_corner(frames, lines, draw_red=True):
-    num_lines = len(lines)
-    color = (0, 0, 255) if draw_red else (0, 255, 0)  # Red if draw_red is True, green otherwise
+def draw_detected_lines(frames, lines):
     for line in lines:
         x1, y1, x2, y2 = line[0]
-        cv2.line(frames, (x1, y1), (x2, y2), color, 2)
-
-    cv2.putText(frames, f"Detected Lines: {num_lines}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2)
+        cv2.line(frames, (x1, y1), (x2, y2), (255, 255, 255), 2)
 
 
 def calculate_surrounding_cell_positions(intersected_points):
@@ -171,49 +160,42 @@ def detect_signs(frame):
     global cell_positions, cell_height, cell_width
     
     for i, cell_center in enumerate(cell_positions):
-        x = int(cell_center[0] - cell_width / 2)
-        y = int(cell_center[1] - cell_height / 2)
+        if game_state[i // 3][i % 3] == -1:
+            x = int(cell_center[0] - cell_width / 2)
+            y = int(cell_center[1] - cell_height / 2)
 
-        # Draw rectangle around the cell in the original frame
-        #cv2.rectangle(frame, (x, y), (x + cell_width, y + cell_height), (0, 255, 0), 2)
-
-        x_roi = x + 2
-        y_roi = y + 2
-        width_roi = cell_width - 4
-        height_roi = cell_height - 4
-        
-        # Crop the cell area from the frame, excluding the border area
-        cell_image = frame[y_roi:y_roi+height_roi, x_roi:x_roi+width_roi]
-
-        # Convert the cell image to grayscale
-        cell_gray = cv2.cvtColor(cell_image, cv2.COLOR_BGR2GRAY)
-        
-        # Apply thresholding to isolate signs
-        _, thresh = cv2.threshold(cell_gray, 135, 255, cv2.THRESH_BINARY)
-        
-        # Find contours in the thresholded image
-        contours, _ = cv2.findContours(thresh, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-
-        if contours:
-            # Sort contours by area in descending order
-            contours = sorted(contours, key=cv2.contourArea, reverse=True)
+            x_roi = x + 2
+            y_roi = y + 2
+            width_roi = cell_width - 4
+            height_roi = cell_height - 4
             
-            if len(contours) > 1:
+            # Crop the cell area from the frame, excluding the border area
+            cell_image = frame[y_roi:y_roi+height_roi, x_roi:x_roi+width_roi]
+
+            # Convert the cell image to grayscale
+            cell_gray = cv2.cvtColor(cell_image, cv2.COLOR_BGR2GRAY)
+            
+            # Apply thresholding to isolate signs
+            _, thresh = cv2.threshold(cell_gray, 135, 255, cv2.THRESH_BINARY)
+            
+            # Find contours in the thresholded image
+            contours, _ = cv2.findContours(thresh, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+
+            if contours and len(contours) > 1:
+                # Sort contours by area in descending order
+                contours = sorted(contours, key=cv2.contourArea, reverse=True)
                 shape = contours[1]
                 
                 # Calculate the area of the contour
                 contour_area = cv2.contourArea(shape)
                 
-                # Determine if the contour represents X or O based on area (heuristic)
-                if contour_area > 100 and contour_area < 190:  # Adjust this threshold as needed
-                    if game_state[i // 3][i % 3] == -1:
-                        game_state[i // 3][i % 3] = 1  # X (player 1)
-                elif contour_area > 200 and contour_area < 400:  # Adjust this threshold as needed
-                    if game_state[i // 3][i % 3] == -1:
-                        game_state[i // 3][i % 3] = 0  # O (player 2)
+                # Determine if the contour represents X or O based on area
+                if contour_area > 100 and contour_area < 190:
+                    game_state[i // 3][i % 3] = 1  # X (player 1)
+                elif contour_area > 200 and contour_area < 400:
+                    game_state[i // 3][i % 3] = 0  # O (player 2)
                 else:
-                    if game_state[i // 3][i % 3] == -1:
-                        game_state[i // 3][i % 3] = -1  # Empty
+                    game_state[i // 3][i % 3] = -1  # Empty
                     
                 # Optionally, draw the detected contour on the original frame
                 # cell_cont = cv2.drawContours(cell_image, [shape], -1, (0, 0, 255), 2)
@@ -222,8 +204,7 @@ def detect_signs(frame):
                 # print(contour_area)
                 # cv2.destroyWindow(f"Cell {i + 1} with contours")
             else:
-                if game_state[i // 3][i % 3] == -1:
-                        game_state[i // 3][i % 3] = -1  # Empty
+                game_state[i // 3][i % 3] = -1  # Empty
 
 
 def detect_hand(frame):
@@ -232,7 +213,7 @@ def detect_hand(frame):
     # Define region of interest (ROI) in the top center part of the frame
     height, width = frame.shape[:2]
     roi_top = 5
-    roi_bottom = height // 5  # Adjust this value as needed
+    roi_bottom = height // 5
     roi_left = width // 5
     roi_right = width - width // 5
     roi = frame[roi_top:roi_bottom, roi_left:roi_right]
@@ -254,6 +235,27 @@ def detect_hand(frame):
             return False
 
 
+def draw_circle(frame, center):
+    cv2.circle(frame, center, 15, (0, 0, 255), 2)
+
+
+def draw_x(frame, center):
+    x, y = center
+    cv2.line(frame, (x - 15, y - 15), (x + 15, y + 15), (255, 0, 0), 2)
+    cv2.line(frame, (x - 15, y + 15), (x + 15, y - 15), (255, 0, 0), 2)
+
+
+def draw_shapes(frame, game_state, cell_positions):
+    for i, row in enumerate(game_state):
+        for j, value in enumerate(row):
+            if value != -1:
+                center = cell_positions[i * 3 + j]
+                if value == 0:
+                    draw_circle(frame, center)
+                elif value == 1:
+                    draw_x(frame, center)
+
+
 
 
 cap = cv2.VideoCapture('xo1c.avi')
@@ -263,21 +265,19 @@ while cap.isOpened():
     if not ret:
         break
     
-    # Detect grid lines
     detect_grid_lines(frame)
-
     detected_lines_canvas = np.zeros_like(frame)
-    draw_detected_lines_bottom_corner(detected_lines_canvas, horizontal_lines + vertical_lines, True)
-
     hand_in_frame = detect_hand(frame)
 
-    if not detect_hand(frame) and len(cell_positions) > 0:
+    if not hand_in_frame and len(cell_positions) > 0:
         detect_signs(frame)
         
+    draw_detected_lines(detected_lines_canvas, bu_horizontal_lines + bu_vertical_lines)
+    draw_shapes(detected_lines_canvas, game_state, cell_positions)
 
-    # Display the frame with drawn grid lines
-    cv2.imshow('Original Video', frame)
-    cv2.imshow('Detected Grid Lines', detected_lines_canvas)
+    # Display the stacked frames
+    stacked_frames = np.hstack((frame, detected_lines_canvas))
+    cv2.imshow('Tic tac toe', stacked_frames)
 
     # Check for the 'q' key press to exit the loop
     if cv2.waitKey(25) & 0xFF == ord('q'):
@@ -286,3 +286,4 @@ while cap.isOpened():
 # Release the video capture object and close all windows
 cap.release()
 cv2.destroyAllWindows()
+
