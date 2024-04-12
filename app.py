@@ -10,28 +10,25 @@ def main(video_number):
     displayed_vertical_lines = []
 
     game_state = [[-1, -1, -1], 
-                [-1, -1, -1], 
-                [-1, -1, -1]]
+                  [-1, -1, -1], 
+                  [-1, -1, -1]]
 
     cell_positions = []
     hand_in_frame = False
-    video_number = 1
 
-    # Load the video
+    # Import video
     video_path = os.path.join('videos', f'xo{video_number}c.avi')
     cap = cv2.VideoCapture(video_path)
 
-    # Process the video and detect tic tac toe game
+    # Process the video and detect tic tac toe moves
     while cap.isOpened():
         ret, frame = cap.read()
         if not ret:
             break
         
-        displayed_horizontal_lines, displayed_vertical_lines, cell_positions = detect_grid_lines(frame, 
-                                                                                                displayed_horizontal_lines, 
-                                                                                                displayed_vertical_lines, 
-                                                                                                hand_in_frame, 
-                                                                                                cell_positions)
+        displayed_horizontal_lines, displayed_vertical_lines, cell_positions = detect_grid_lines(frame, displayed_horizontal_lines, 
+                                                                                                 displayed_vertical_lines, hand_in_frame, 
+                                                                                                 cell_positions)
         detected_lines_canvas = np.zeros_like(frame)
         hand_in_frame = detect_hand(frame)
 
@@ -40,6 +37,10 @@ def main(video_number):
             
         draw_detected_lines(detected_lines_canvas, displayed_horizontal_lines + displayed_vertical_lines)
         draw_shapes(detected_lines_canvas, game_state, cell_positions)
+
+        game_result, winning_line = gameScore(game_state)
+        if game_result is not None:
+            writeScore(game_result, winning_line, cell_positions, detected_lines_canvas)
 
         # Display the stacked frames
         stacked_frames = np.hstack((frame, detected_lines_canvas))

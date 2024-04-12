@@ -93,8 +93,8 @@ def calculate_surrounding_cell_positions(cell_positions):
 
     # Define offsets for surrounding cells relative to the middle cell
     offsets = [(-1, -1), (-1, 0), (-1, 1),
-               (0, -1),           (0, 1),
-               (1, -1), (1, 0), (1, 1)]
+               ( 0, -1),          ( 0, 1),
+               ( 1, -1), ( 1, 0), ( 1, 1)]
 
     cell_positions.append((int(middle_cell_center_x), int(middle_cell_center_y)))
 
@@ -138,10 +138,8 @@ def detect_hand(frame):
     roi_top = 5
     roi_bottom = height // 5
     roi_left = width // 5
-    roi_right = width - width // 5
+    roi_right = width - roi_left
     roi = frame[roi_top:roi_bottom, roi_left:roi_right]
-
-    #cv2.rectangle(frame, (roi_left, roi_top), (roi_right, roi_bottom), (0, 255, 0), 2)
 
     gray_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
 
@@ -251,3 +249,55 @@ def draw_cells(image, cell_positions):
         top_left = (x, y)
         bottom_right = (x + cell_width, y + cell_height)
         cv2.rectangle(image, top_left, bottom_right, (255, 0, 0), 2)
+
+def gameScore(game_state):
+    # Check rows
+    for row_index, row in enumerate(game_state):
+        if row.count(1) == 3:
+            return 1, [(row_index, col) for col in range(3)]  # Player X wins
+        elif row.count(0) == 3:
+            return 0, [(row_index, col) for col in range(3)]  # Player O wins
+
+    # Check columns
+    for col in range(3):
+        if game_state[0][col] == game_state[1][col] == game_state[2][col] == 1:
+            return 1, [(row, col) for row in range(3)]
+        elif game_state[0][col] == game_state[1][col] == game_state[2][col] == 0:
+            return 0, [(row, col) for row in range(3)]
+
+    # Check diagonals
+    if game_state[0][0] == game_state[1][1] == game_state[2][2] == 1:
+        return 1, [(i, i) for i in range(3)]
+    elif game_state[0][0] == game_state[1][1] == game_state[2][2] == 0:
+        return 0, [(i, i) for i in range(3)]
+    elif game_state[0][2] == game_state[1][1] == game_state[2][0] == 1:
+        return 1, [(i, 2 - i) for i in range(3)]
+    elif game_state[0][2] == game_state[1][1] == game_state[2][0] == 0:
+        return 0, [(i, 2 - i) for i in range(3)]
+
+    # Check for draw
+    for row in game_state:
+        if -1 in row:
+            return None, []  # Game still in progress
+    return -1, []  # Draw
+
+
+def writeScore(score, winning_line, cell_positions, frame):
+    if score == -1:
+        cv2.putText(frame, "It's a draw!", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+    elif score == 0:
+        cv2.putText(frame, "O wins!", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+    elif score == 1:
+        cv2.putText(frame, "X wins!", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+
+    # Draw winning line
+    if winning_line and score in {0, 1}:
+        position1 = winning_line[0]
+        position2 = winning_line[-1]
+
+        x1, y1 = cell_positions[position1[0] * 3 + position1[1]]
+        x2, y2 = cell_positions[position2[0] * 3 + position2[1]]
+
+        cv2.line(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+
+        
